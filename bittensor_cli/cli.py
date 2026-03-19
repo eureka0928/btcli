@@ -1243,6 +1243,10 @@ class CLIManager:
             "execute",
             rich_help_panel=HELP_PANELS["PROXY"]["MGMT"],
         )(self.proxy_execute_announced)
+        self.proxy_app.command(
+            "reject",
+            rich_help_panel=HELP_PANELS["PROXY"]["MGMT"],
+        )(self.proxy_reject_announcement)
 
         # Sub command aliases
         # Wallet
@@ -10225,6 +10229,80 @@ class CLIManager:
         if success and got_call_from_db is not None:
             with ProxyAnnouncements.get_db() as (conn, cursor):
                 ProxyAnnouncements.mark_as_executed(conn, cursor, got_call_from_db)
+
+    def proxy_reject_announcement(
+        self,
+        delegate: Annotated[
+            str,
+            typer.Option(
+                callback=is_valid_ss58_address_param,
+                prompt="Enter the SS58 address of the delegate whose announcement to reject",
+                help="The SS58 address of the delegate whose announcement to reject",
+            ),
+        ] = "",
+        call_hash: str = typer.Option(
+            ...,
+            "--call-hash",
+            help="The hash of the announced call to reject",
+            prompt="Enter the call hash of the announcement to reject",
+        ),
+        network: Optional[list[str]] = Options.network,
+        wallet_name: str = Options.wallet_name,
+        wallet_path: str = Options.wallet_path,
+        wallet_hotkey: str = Options.wallet_hotkey,
+        prompt: bool = Options.prompt,
+        decline: bool = Options.decline,
+        wait_for_inclusion: bool = Options.wait_for_inclusion,
+        wait_for_finalization: bool = Options.wait_for_finalization,
+        period: int = Options.period,
+        quiet: bool = Options.quiet,
+        verbose: bool = Options.verbose,
+        json_output: bool = Options.json_output,
+    ):
+        """
+        Rejects a previously announced proxy call.
+
+        As the real account (the one being proxied), you can reject a pending
+        announcement made by a delegate, preventing it from being executed.
+        This reclaims the deposit that was reserved when the announcement was made.
+
+        [bold]Example:[/bold]
+        Reject an announced proxy call
+        [green]$[/green] btcli proxy reject --delegate 5GDel... --call-hash 0xabcdef...
+
+        """
+        logger.debug(
+            "args:\n"
+            f"delegate: {delegate}\n"
+            f"call_hash: {call_hash}\n"
+            f"network: {network}\n"
+            f"wait_for_finalization: {wait_for_finalization}\n"
+            f"wait_for_inclusion: {wait_for_inclusion}\n"
+            f"era: {period}\n"
+        )
+        self.verbosity_handler(quiet, verbose, json_output, prompt)
+        wallet = self.wallet_ask(
+            wallet_name=wallet_name,
+            wallet_path=wallet_path,
+            wallet_hotkey=wallet_hotkey,
+            ask_for=[WO.NAME, WO.PATH],
+            validate=WV.WALLET,
+        )
+        return self._run_command(
+            proxy_commands.reject_announcement(
+                subtensor=self.initialize_chain(network),
+                wallet=wallet,
+                delegate=delegate,
+                call_hash=call_hash,
+                prompt=prompt,
+                decline=decline,
+                quiet=quiet,
+                wait_for_inclusion=wait_for_inclusion,
+                wait_for_finalization=wait_for_finalization,
+                period=period,
+                json_output=json_output,
+            )
+        )
 
     @staticmethod
     def convert(

@@ -1067,3 +1067,57 @@ def test_proxy_remove_with_delegate_calls_remove_proxy(mock_proxy_commands):
 
         # Should call _run_command with the result
         mock_run_command.assert_called_once()
+
+
+# ============================================================================
+# Tests for proxy_reject_announcement command
+# ============================================================================
+
+
+@patch("bittensor_cli.cli.proxy_commands")
+def test_proxy_reject_announcement_calls_reject(mock_proxy_commands):
+    """Test that proxy_reject_announcement calls reject_announcement with correct parameters"""
+    cli_manager = CLIManager()
+    valid_delegate = "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty"
+    call_hash = "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+    mock_wallet = Mock()
+    mock_subtensor = Mock()
+
+    with (
+        patch.object(cli_manager, "verbosity_handler"),
+        patch.object(cli_manager, "wallet_ask", return_value=mock_wallet),
+        patch.object(cli_manager, "initialize_chain", return_value=mock_subtensor),
+        patch.object(cli_manager, "_run_command") as mock_run_command,
+    ):
+        cli_manager.proxy_reject_announcement(
+            delegate=valid_delegate,
+            call_hash=call_hash,
+            network=None,
+            wallet_name="test_wallet",
+            wallet_path="/tmp/test",
+            wallet_hotkey="test_hotkey",
+            prompt=False,
+            decline=False,
+            wait_for_inclusion=True,
+            wait_for_finalization=True,
+            period=100,
+            quiet=True,
+            verbose=False,
+            json_output=False,
+        )
+
+        mock_proxy_commands.reject_announcement.assert_called_once_with(
+            subtensor=mock_subtensor,
+            wallet=mock_wallet,
+            delegate=valid_delegate,
+            call_hash=call_hash,
+            prompt=False,
+            decline=False,
+            quiet=True,
+            wait_for_inclusion=True,
+            wait_for_finalization=True,
+            period=100,
+            json_output=False,
+        )
+
+        mock_run_command.assert_called_once()
