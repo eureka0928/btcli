@@ -1121,3 +1121,152 @@ def test_proxy_reject_announcement_calls_reject(mock_proxy_commands):
         )
 
         mock_run_command.assert_called_once()
+
+
+# ============================================================================
+# Async tests for reject_announcement function in proxy.py
+# ============================================================================
+
+VALID_DELEGATE = "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty"
+VALID_CALL_HASH = "0xabcdef1234567890"
+
+_REJECT_DEFAULTS = dict(
+    delegate=VALID_DELEGATE,
+    call_hash=VALID_CALL_HASH,
+    decline=False,
+    quiet=False,
+    wait_for_inclusion=True,
+    wait_for_finalization=True,
+    period=64,
+)
+
+
+@pytest.mark.asyncio
+async def test_reject_announcement_success():
+    """Test reject_announcement composes the correct call and submits it."""
+    from bittensor_cli.src.commands.proxy import reject_announcement
+
+    mock_subtensor = MagicMock()
+    mock_subtensor.substrate.compose_call = AsyncMock(return_value="mock_call")
+    mock_receipt = MagicMock()
+    mock_receipt.get_extrinsic_identifier = AsyncMock(return_value="0x123::1")
+    mock_subtensor.sign_and_send_extrinsic = AsyncMock(
+        return_value=(True, "Success", mock_receipt)
+    )
+    mock_wallet = MagicMock()
+
+    with (
+        patch(
+            "bittensor_cli.src.commands.proxy.unlock_key",
+            return_value=MagicMock(success=True),
+        ),
+        patch(
+            "bittensor_cli.src.commands.proxy.print_extrinsic_id",
+            new_callable=AsyncMock,
+        ),
+    ):
+        await reject_announcement(
+            subtensor=mock_subtensor,
+            wallet=mock_wallet,
+            **_REJECT_DEFAULTS,
+            prompt=False,
+            json_output=False,
+        )
+
+    mock_subtensor.substrate.compose_call.assert_awaited_once_with(
+        call_module="Proxy",
+        call_function="reject_announcement",
+        call_params={
+            "delegate": VALID_DELEGATE,
+            "call_hash": VALID_CALL_HASH,
+        },
+    )
+    mock_subtensor.sign_and_send_extrinsic.assert_awaited_once_with(
+        call="mock_call",
+        wallet=mock_wallet,
+        wait_for_inclusion=True,
+        wait_for_finalization=True,
+        era={"period": 64},
+        proxy=None,
+        announce_only=False,
+    )
+
+
+@pytest.mark.asyncio
+async def test_reject_announcement_wallet_unlock_failure():
+    """Test reject_announcement returns None when wallet unlock fails."""
+    from bittensor_cli.src.commands.proxy import reject_announcement
+
+    mock_subtensor = MagicMock()
+
+    with patch(
+        "bittensor_cli.src.commands.proxy.unlock_key",
+        return_value=MagicMock(success=False, message="Wrong password"),
+    ):
+        result = await reject_announcement(
+            subtensor=mock_subtensor,
+            wallet=MagicMock(),
+            **_REJECT_DEFAULTS,
+            prompt=False,
+            json_output=False,
+        )
+
+    assert result is None
+    mock_subtensor.substrate.compose_call.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_reject_announcement_prompt_declined():
+    """Test reject_announcement returns None when user declines the prompt."""
+    from bittensor_cli.src.commands.proxy import reject_announcement
+
+    mock_subtensor = MagicMock()
+
+    with patch(
+        "bittensor_cli.src.commands.proxy.confirm_action",
+        return_value=False,
+    ):
+        result = await reject_announcement(
+            subtensor=mock_subtensor,
+            wallet=MagicMock(),
+            **_REJECT_DEFAULTS,
+            prompt=True,
+            json_output=False,
+        )
+
+    assert result is None
+    mock_subtensor.substrate.compose_call.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_reject_announcement_json_output_on_unlock_failure():
+    """Test reject_announcement outputs JSON on wallet unlock failure when json_output=True."""
+    from bittensor_cli.src.commands.proxy import reject_announcement
+
+    mock_subtensor = MagicMock()
+
+    with (
+        patch(
+            "bittensor_cli.src.commands.proxy.unlock_key",
+            return_value=MagicMock(success=False, message="Wrong password"),
+        ),
+        patch(
+            "bittensor_cli.src.commands.proxy.json_console"
+        ) as mock_json_console,
+    ):
+        result = await reject_announcement(
+            subtensor=mock_subtensor,
+            wallet=MagicMock(),
+            **_REJECT_DEFAULTS,
+            prompt=False,
+            json_output=True,
+        )
+
+    assert result is None
+    mock_json_console.print_json.assert_called_once_with(
+        data={
+            "success": False,
+            "message": "Wrong password",
+            "extrinsic_identifier": None,
+        }
+    )
